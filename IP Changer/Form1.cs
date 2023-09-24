@@ -10,6 +10,9 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Windows.Forms.VisualStyles;
 using System.Net.NetworkInformation;
+using System.Diagnostics;
+using System.Net;
+using System.Threading;
 
 namespace IP_Changer
 {
@@ -39,7 +42,7 @@ namespace IP_Changer
             //            notifyIcon1.ShowBalloonTip(1000);
 
             this.Hide();
-            goButton.Enabled = false;
+            saveButton.Enabled = false;
 
             updateNics();
             updateMenu();
@@ -144,19 +147,19 @@ namespace IP_Changer
 
                 Console.WriteLine("Will change to " + h.ip + " / " + h.subnet + " / " + h.gateway);
 
+                string dns = dns1Textbox.Text + "," + dns2Textbox.Text;
                 NetworkConfigurator.SetIP(targetNic, h.ip, h.subnet, h.gateway);
+                NetworkConfigurator.SetDNS(targetNic, dns);
             }
         }
 
         private void nicSelection_ItemClicked(object sender, ToolStripItemClickedEventArgs e)
         {
-            Console.WriteLine("clicked item " + (int)e.ClickedItem.Tag);
             nic n = nics[(int)e.ClickedItem.Tag];
-            Console.WriteLine("Target nic is " + n.name + ": " + n.description);
 
             targetNic = n.description;
 
-            goButton.Enabled = true;
+            saveButton.Enabled = true;
         }
 
         private void closeButton_Click(object sender, FormClosingEventArgs e)
@@ -270,6 +273,7 @@ namespace IP_Changer
                         adapter.InvokeMethod("SetGateways", newGateway, null);
 
                         Console.WriteLine("Updated to static IP address!");
+
                     }
                     catch (Exception ex)
                     {
@@ -279,24 +283,29 @@ namespace IP_Changer
             }
         }
 
-        /// <summary>
-        /// Set's the DNS Server of the local machine
-        /// </summary>
-        /// <param name="nic">NIC address</param>
-        /// <param name="dnsServers">Comma seperated list of DNS server addresses</param>
-        /// <remarks>Requires a reference to the System.Management namespace</remarks>
-        public static void SetNameservers(string nicDescription, string[] dnsServers)
+        public static void SetDNS(string NIC, string DNS)
         {
-            using (var networkConfigMng = new ManagementClass("Win32_NetworkAdapterConfiguration"))
+            ManagementClass objMC = new ManagementClass("Win32_NetworkAdapterConfiguration");
+            ManagementObjectCollection objMOC = objMC.GetInstances();
+
+            foreach (ManagementObject objMO in objMOC)
             {
-                using (var networkConfigs = networkConfigMng.GetInstances())
+                if ((bool)objMO["IPEnabled"])
                 {
-                    foreach (var managementObject in networkConfigs.Cast<ManagementObject>().Where(mo => (bool)mo["IPEnabled"] && (string)mo["Description"] == nicDescription))
+                    // if you are using the System.Net.NetworkInformation.NetworkInterface you'll need to change this line to if (objMO["Caption"].ToString().Contains(NIC)) and pass in the Description property instead of the name 
+                    if (objMO["Description"].Equals(NIC))
                     {
-                        using (var newDNS = managementObject.GetMethodParameters("SetDNSServerSearchOrder"))
+                        try
                         {
-                            newDNS["DNSServerSearchOrder"] = dnsServers;
-                            managementObject.InvokeMethod("SetDNSServerSearchOrder", newDNS, null);
+                            ManagementBaseObject newDNS =
+                                objMO.GetMethodParameters("SetDNSServerSearchOrder");
+                            newDNS["DNSServerSearchOrder"] = DNS.Split(',');
+                            ManagementBaseObject setDNS =
+                                objMO.InvokeMethod("SetDNSServerSearchOrder", newDNS, null);
+                        }
+                        catch (Exception)
+                        {
+                            throw;
                         }
                     }
                 }
