@@ -91,6 +91,8 @@
             this.ipTextbox.Name = "ipTextbox";
             this.ipTextbox.Size = new System.Drawing.Size(185, 32);
             this.ipTextbox.TabIndex = 4;
+            this.ipTextbox.KeyPress += new System.Windows.Forms.KeyPressEventHandler(CheckEnterKeyPress);
+            this.ipTextbox.KeyPress += new System.Windows.Forms.KeyPressEventHandler(CheckAllFields);
             // 
             // subnetTextbox
             // 
@@ -101,6 +103,7 @@
             this.subnetTextbox.Name = "subnetTextbox";
             this.subnetTextbox.Size = new System.Drawing.Size(185, 32);
             this.subnetTextbox.TabIndex = 6;
+            this.subnetTextbox.KeyPress += new System.Windows.Forms.KeyPressEventHandler(CheckAllFields);
             // 
             // label2
             // 
@@ -121,6 +124,7 @@
             this.gatewayTextbox.Name = "gatewayTextbox";
             this.gatewayTextbox.Size = new System.Drawing.Size(185, 32);
             this.gatewayTextbox.TabIndex = 8;
+            this.gatewayTextbox.KeyPress += new System.Windows.Forms.KeyPressEventHandler(CheckAllFields);
             // 
             // label3
             // 

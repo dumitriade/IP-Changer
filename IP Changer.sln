@@ -5,6 +5,8 @@ VisualStudioVersion = 17.6.33723.286
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IP Changer", "IP Changer\IP Changer.csproj", "{D779C5BD-D44B-4F61-9FDC-3082F0187A9E}"
 EndProject
+Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "IP Changer Installer", "IP Changer Installer\IP Changer Installer.vdproj", "{EA78058E-7FDC-48E7-A79D-9CFC169EAC94}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,8 @@ Global
 		{D779C5BD-D44B-4F61-9FDC-3082F0187A9E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D779C5BD-D44B-4F61-9FDC-3082F0187A9E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D779C5BD-D44B-4F61-9FDC-3082F0187A9E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EA78058E-7FDC-48E7-A79D-9CFC169EAC94}.Debug|Any CPU.ActiveCfg = Debug
+		{EA78058E-7FDC-48E7-A79D-9CFC169EAC94}.Release|Any CPU.ActiveCfg = Release
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

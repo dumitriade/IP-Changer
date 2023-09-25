@@ -13,6 +13,8 @@ using System.Net.NetworkInformation;
 using System.Diagnostics;
 using System.Net;
 using System.Threading;
+using System.Text.RegularExpressions;
+using System.Net.Sockets;
 
 namespace IP_Changer
 {
@@ -44,8 +46,37 @@ namespace IP_Changer
             this.Hide();
             saveButton.Enabled = false;
 
+            //get current network settings
+            getCurrentSettings();
+
             updateNics();
             updateMenu();
+        }
+
+        private void getCurrentSettings()
+        {
+            string hostName = Dns.GetHostName(); // Retrive the Name of HOST
+            string myIP = Dns.GetHostByName(hostName).AddressList[0].ToString();
+            string myGateway = GetDefaultGateway();
+
+            Console.WriteLine("current settings: " + myIP + ", " + myGateway);
+
+            historyObj h = new historyObj();
+
+            h.ip = myIP;
+            h.gateway = myGateway;
+
+            AddToHistory(h);
+        }
+
+        public static string GetDefaultGateway()
+        {
+            var gateway_address = NetworkInterface.GetAllNetworkInterfaces()
+                .Where(e => e.OperationalStatus == OperationalStatus.Up)
+                .SelectMany(e => e.GetIPProperties().GatewayAddresses)
+                .FirstOrDefault();
+            if (gateway_address == null) return null;
+            return gateway_address.Address.ToString();
         }
 
         private void updateNics()
@@ -82,6 +113,7 @@ namespace IP_Changer
 
                     contextMenuStrip1.Items.Add(newMenuItem);
 
+                    newMenuItem.Enabled = targetNic != "";
                 }
                 contextMenuStrip1.Items.Add("-");
             }
@@ -94,15 +126,38 @@ namespace IP_Changer
             {
                 nic n = nics[i];
                 item.DropDownItems.Add(n.name);
-
                 item.DropDownItems[i].Tag = i;
-
             }
             item.DropDownItemClicked += new System.Windows.Forms.ToolStripItemClickedEventHandler(this.nicSelection_ItemClicked);
 
             contextMenuStrip1.Items.Add(item);
             contextMenuStrip1.Items.Add("Exit");
 
+        }
+
+        private void CheckEnterKeyPress(object sender, System.Windows.Forms.KeyPressEventArgs e)
+        {
+            Console.WriteLine("checking for enter keypress");
+            if (e.KeyChar == (char)Keys.Return || e.KeyChar == (char)Keys.Tab)
+            {
+                if (NetworkConfigurator.confirmIP(ipTextbox.Text))
+                {
+                    //confirmed IP autofill subnet and gateway
+
+                    if (ipTextbox.Text.Contains("/")){
+                        //get CIDR
+                        string cidr = ipTextbox.Text.Substring(ipTextbox.Text.LastIndexOf("/", StringComparison.Ordinal) + 1);
+                        subnetTextbox.Text = NetworkConfigurator.CidrToSubnet(int.Parse(cidr));
+
+                        gatewayTextbox.Text = NetworkConfigurator.firstIPinSubnet(ipTextbox.Text, subnetTextbox.Text);
+                    }
+                }
+            }
+        }
+
+        private void CheckAllFields(object sender, System.Windows.Forms.KeyPressEventArgs e)
+        {
+            saveButton.Enabled = (NetworkConfigurator.confirmIP(ipTextbox.Text) == true) && (NetworkConfigurator.confirmIP(subnetTextbox.Text) == true) && (NetworkConfigurator.confirmIP(gatewayTextbox.Text) == true);
         }
 
         private void goButton_Click(object sender, EventArgs e)
@@ -112,16 +167,29 @@ namespace IP_Changer
             his.gateway = gatewayTextbox.Text;
             his.subnet = subnetTextbox.Text;
 
-            his.toString = ipTextbox.Text + "/24"; //TODO: properly handle subnet 0 128 192 224 240 248 252 254 255
 
-            if (historyObjs.Length > maxHistory)
-                historyObjs = historyObjs.Skip(1).ToArray();
+            string ip = his.ip;
+            if (ip.Contains("/")) ip = ip.Substring(0, his.ip.LastIndexOf("/"));
 
-            historyObjs = historyObjs.Concat(new historyObj[] { his }).ToArray();
+            AddToHistory(his);
 
             this.Hide();
             updateMenu();
             NetworkConfigurator.net_adapters();
+        }
+
+        private void AddToHistory(historyObj h)
+        {
+            if (historyObjs.Length > maxHistory)
+                historyObjs = historyObjs.Skip(1).ToArray();
+
+            if (h.subnet == null)
+                h.subnet = "255.255.255.0";
+
+            if (h.ip.Contains("/")) h.ip = h.ip.Substring(0, h.ip.LastIndexOf("/"));
+
+            h.toString = h.ip + "/" + NetworkConfigurator.SubnetToCIDR(h.subnet);
+            historyObjs = historyObjs.Concat(new historyObj[] { h }).ToArray();
         }
 
         private void contextMenuStrip_ItemClicked(object sender, ToolStripItemClickedEventArgs e)
@@ -131,17 +199,20 @@ namespace IP_Changer
             if (e.ClickedItem.Text == "DHCP")
             {
                 Console.WriteLine("will change to DHCP");
-                _ = NetworkConfigurator.SetDHCP(targetNic);
+                if (NetworkConfigurator.SetDHCP(targetNic))
+                    Console.WriteLine("updated NIC to DHCP");
+                else
+                    Console.WriteLine("failed to change to DHCP");
             }
             else if (e.ClickedItem.Text == "Custom")
             {
                 this.Show();
             }
-            else if(e.ClickedItem.Text == "Target NIC")
+            else if (e.ClickedItem.Text == "Exit")
             {
-
+                this.Close();
             }
-            else
+            else if(e.ClickedItem.Text != "Target NIC")
             {
                 historyObj h = historyObjs[(int)e.ClickedItem.Tag];
 
@@ -158,8 +229,7 @@ namespace IP_Changer
             nic n = nics[(int)e.ClickedItem.Tag];
 
             targetNic = n.description;
-
-            saveButton.Enabled = true;
+            updateMenu();
         }
 
         private void closeButton_Click(object sender, FormClosingEventArgs e)
@@ -207,6 +277,70 @@ namespace IP_Changer
             return values;
         }
 
+        public static string CidrToSubnet(int bits)
+        {
+            string result = "";
+
+            if (bits < 0 || bits > 32) return result;
+
+            int octet1, octet2, octet3, octet4;
+
+            octet1 = bits >= 8 ? 8 : bits;
+            octet2 = bits >= 16 ? 8 : bits-8;
+            octet3 = bits >= 24 ? 8 : bits-16;
+            octet4 = bits >= 32 ? 8 : bits - 24;
+
+            if (octet1 < 0) octet1 = 0;
+            if (octet2 < 0) octet2 = 0;
+            if (octet3 < 0) octet3 = 0;
+            if (octet4 < 0) octet4 = 0;
+
+            int[] masks = new int[9] { 0, 128, 192, 224, 240, 248, 252, 254, 255 };
+
+            result = masks[octet1].ToString() + "." + masks[octet2].ToString() + "." + masks[octet3].ToString() + "." + masks[octet4].ToString();
+
+            return result;
+        }
+
+        public static UInt32 SubnetToCIDR(string subnetStr)
+        {
+            IPAddress subnetAddress = IPAddress.Parse(subnetStr);
+            byte[] ipParts = subnetAddress.GetAddressBytes();
+            UInt32 subnet = 16777216 * Convert.ToUInt32(ipParts[0]) + 65536 * Convert.ToUInt32(ipParts[1]) + 256 * Convert.ToUInt32(ipParts[2]) + Convert.ToUInt32(ipParts[3]);
+            UInt32 mask = 0x80000000;
+            UInt32 subnetConsecutiveOnes = 0;
+            for (int i = 0; i < 32; i++)
+            {
+                if (!(mask & subnet).Equals(mask)) break;
+
+                subnetConsecutiveOnes++;
+                mask = mask >> 1;
+            }
+            return subnetConsecutiveOnes;
+        }
+
+        public static bool confirmIP(string ip)
+        {
+            Match match = Regex.Match(ip, @"^(25[0-5]|2[0-4][0-9]|[0-1]{1}[0-9]{2}|[1-9]{1}[0-9]{1}|[1-9])\.(25[0-5]|2[0-4][0-9]|[0-1]{1}[0-9]{2}|[1-9]{1}[0-9]{1}|[1-9]|0)\.(25[0-5]|2[0-4][0-9]|[0-1]{1}[0-9]{2}|[1-9]{1}[0-9]{1}|[1-9]|0)\.(25[0-5]|2[0-4][0-9]|[0-1]{1}[0-9]{2}|[1-9]{1}[0-9]{1}|[0-9])($|/(\b([1-9]|[12][0-9]|3[0-2])\b))?$");
+            if (match.Success)
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        public static string firstIPinSubnet(string ip, string subnet)
+        {
+            string result = "";
+
+            result = ip.Substring(0, ip.LastIndexOf('.')) + ".1";
+
+            return result;
+        }
+
         public static bool SetDHCP(string nicName)
         {
             ManagementClass mc = new ManagementClass("Win32_NetworkAdapterConfiguration");
@@ -232,7 +366,9 @@ namespace IP_Changer
 
                         newDNS["DNSServerSearchOrder"] = null;
                         ManagementBaseObject enableDHCP = mo.InvokeMethod("EnableDHCP", null, null);
-                        ManagementBaseObject setDNS = mo.InvokeMethod("SetDNSServerSearchOrder", newDNS, null);
+                        //                        ManagementBaseObject setDNS = mo.InvokeMethod("SetDNSServerSearchOrder", newDNS, null);
+
+                        SetDNS(nicName, "");
                     }
                     catch
                     {
@@ -244,8 +380,13 @@ namespace IP_Changer
 
         }
 
-            public static void SetIP(string description, string ip, string subnet, string gateway)
+        public static void SetIP(string description, string ip, string subnet, string gateway)
         {
+            if (description == null || description.Length == 0)
+            {
+                MessageBox.Show("Please select the target Network Interface Card first.", "This can't possibly work", MessageBoxButtons.OK, MessageBoxIcon.Exclamation);
+                return;
+            }
             string subnetMask = subnet;
             string address = ip;
 
@@ -313,5 +454,3 @@ namespace IP_Changer
         }
     }
 }
-
-
