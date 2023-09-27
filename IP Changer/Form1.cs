@@ -16,6 +16,7 @@ using System.Threading;
 using System.Text.RegularExpressions;
 using System.Net.Sockets;
 
+
 namespace IP_Changer
 {
     public partial class Form1 : Form
@@ -51,6 +52,19 @@ namespace IP_Changer
 
             updateNics();
             updateMenu();
+
+            //test masks
+            for (int i = 0; i <= 32; i++)
+            {
+                Console.WriteLine("/" + i + " = " + NetworkConfigurator.CidrToSubnet(i));
+            }
+
+            //test cidr
+            for (int i = 0;i <= 36; i++)
+            {
+                string testString = "192.168.0.1/" + i.ToString();
+                Console.WriteLine(testString + ": " + NetworkConfigurator.confirmIP(testString));
+            }
         }
 
         private void getCurrentSettings()
@@ -167,9 +181,10 @@ namespace IP_Changer
             his.gateway = gatewayTextbox.Text;
             his.subnet = subnetTextbox.Text;
 
-
             string ip = his.ip;
             if (ip.Contains("/")) ip = ip.Substring(0, his.ip.LastIndexOf("/"));
+
+            his.toString = ip + "/" + NetworkConfigurator.SubnetToCIDR(subnetTextbox.Text);
 
             AddToHistory(his);
 
